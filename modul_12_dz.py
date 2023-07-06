@@ -282,4 +282,5 @@ address_book = AddressBook()
 address_book.load_from_file()
 
 if __name__ == "__main__":
+    #
     main()
