@@ -33,6 +33,31 @@ def find_command(params):
         return "Enter a word to search"
     return "\n".join(f" {result}" for result in address_book.search_by_content(params))        
 
+def note_find(params):
+    if not params:
+        return "Enter a word to search note"
+    return "\n".join(f" {result}" for result in note_book.search_by_content(params))        
+
+@input_error
+def note_add(params):
+    list_param = params.split(' ')
+    if len(list_param) < 3:
+            raise CustomException("Після команди через пробіл потрібно ввести назву замітки, теги та текст замітки")
+
+    name = list_param[0]
+    tags = list_param[1:len(list_param)-1]
+    text_note = list_param[len(list_param)-1]
+    
+    record = note_book.search_record(name)
+    for tag in tags:
+        record.add_tag(tag)
+    if text_note:
+        record.add_note(text_note)
+    return f"Note {name} added"
+
+def note_show_all(params):
+    return note_book.show_all_records()
+
 @input_error
 def add_command(params):
     list_param = params.split(' ')
@@ -66,6 +91,124 @@ def birthday_command(params):
     
 def show_all_command(params):
     return address_book.show_all_records()
+
+class NoteBook(UserDict):
+    def __init__(self):
+        super().__init__()
+        self.data = {}
+
+    def add_record(self, record):
+        self.data[record.name.value] = record
+
+    def remove_record(self, name):
+        del self.data[name]
+
+    def search_record(self, search_criteria):
+        for record in self.data.values():
+            if search_criteria.lower() in record.name.value.lower():
+                return record
+        record = RecordNote(search_criteria)
+        self.add_record(record)
+        return record
+
+    def search_records(self, search_criteria):
+        results = []
+        for record in self.data.values():
+            if search_criteria.lower() in record.name.value.lower():
+                results.append(record)
+        return results
+    
+    def show_all_records(self):
+        results = ''
+        for record in self.data.values():
+            results += "\n"+f"{record.name.value}:"+"".join(f" {tag.value}" for tag in record.tags)
+            if record.text_note:
+                results += ' Text note: '+ str(record.text_note.value)
+        if not results:
+            results = "Note list is empty"
+        return results
+
+    def __iter__(self):
+        self._iter_index = 0
+        self._iter_chunk_size = 5
+        return self
+
+    def __next__(self):
+        if self._iter_index >= len(self.data):
+            raise StopIteration
+
+        chunk = list(self.data.values())[self._iter_index:self._iter_index + self._iter_chunk_size]
+        self._iter_index += self._iter_chunk_size
+
+        return "\n".join(str(record) for record in chunk)
+    
+    def save_to_file(self, file_path):
+        data = {
+            'records': [record.to_dict() for record in self.data.values()]
+        }
+        with open(file_path, 'w') as file:
+            json.dump(data, file, default=str)
+
+    def load_from_file(self):
+        file_path = os.path.join(os.getcwd(), "note_book.json")
+        if os.path.isfile(file_path):
+            with open(file_path, 'r') as file:
+                data = json.load(file)
+            for record_data in data['records']:
+                record = RecordNote.from_dict(record_data)
+                self.add_record(record)
+    
+    def search_by_content(self, search_string):
+        results = []
+        for record in self.data.values():
+            if search_string.lower() in record.name.value.lower():
+                results.append(str(record))
+            else:
+                for tag in record.tags:
+                    if search_string.lower() in tag.value.lower():
+                        results.append(str(record))
+                        break
+        return results
+
+class RecordNote:
+    def __init__(self, name, text_note=None):
+        self.name = Name(name)
+        self.text_note = Name(text_note)
+        self.tags = []
+
+    def add_tag(self, tag):
+        self.tags.append(Name(tag))
+
+    def add_note(self, text_note):
+        self.text_note = Name(text_note)
+        
+    def remove_tag(self, tag):
+        self.tags = [p for p in self.tags if p.value != tag]
+
+    def edit_tag(self, old_tag, new_tag):
+        for i, tag in enumerate(self.tags):
+            if tag.value == old_tag:
+                self.tags[i] = Name(new_tag)
+
+    def __str__(self):
+        results = f"{self.name.value}: {' '.join(tag.value for tag in self.tags)}"
+        if self.text_note:
+                results += ' Text note: '+ str(self.text_note.value)
+        return results
+    
+    def to_dict(self):
+        return {
+            'name': self.name.value,
+            'text_note': str(self.text_note.value) if self.text_note else None,
+            'tags': [tag.value for tag in self.tags]
+        }
+
+    @classmethod
+    def from_dict(cls, data):
+        record = cls(data['name'], data['text_note'])
+        for tag in data['tags']:
+            record.add_tag(tag)
+        return record
 
 class AddressBook(UserDict):
     def __init__(self):
@@ -251,6 +394,7 @@ class Birthday(Field):
         self._value = self._validate_birthday(new_value)
 
 def main():
+    print("Введіть команду")
     commands = {
         'hello': hello_command,
         'add': add_command,
@@ -259,12 +403,16 @@ def main():
         'show all': show_all_command,
         'iter rec': iter_record,
         'find': find_command,
+        'note_add': note_add,
+        'note_find': note_find,
+        'note_show_all': note_show_all
     }
 
     while True:
         user_input = input("> ").lower()
         if user_input in ["good bye", "close", "exit"]:
             address_book.save_to_file(os.path.join(os.getcwd(), "address_book.json"))
+            note_book.save_to_file(os.path.join(os.getcwd(), "note_book.json"))
             print("Good bye!")
             break
         
@@ -280,6 +428,9 @@ def main():
 #contacts = {}
 address_book = AddressBook()
 address_book.load_from_file()
+
+note_book = NoteBook()
+note_book.load_from_file()
 
 if __name__ == "__main__":
     main()
