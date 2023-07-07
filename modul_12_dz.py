@@ -34,26 +34,41 @@ def find_command(params):
     return "\n".join(f" {result}" for result in address_book.search_by_content(params))        
 
 def note_find(params):
+    wordfind = ""
     if not params:
-        return "Enter a word to search note"
-    return "\n".join(f" {result}" for result in note_book.search_by_content(params))        
+        wordfind = input("Введіть слово пошуку: ")
+    else:
+        wordfind = params
+    if not wordfind:
+        return "Слово для пошуку не введене!"
+    
+    if wordfind.startswith('#'):
+        wordfind = wordfind[1:]
+        return "\n".join(f" {result}" for result in note_book.search_by_tag(wordfind))        
+    else:
+        return "\n".join(f" {result}" for result in note_book.search_by_content(wordfind))        
 
 @input_error
 def note_add(params):
-    list_param = params.split(' ')
-    if len(list_param) < 3:
-            raise CustomException("Після команди через пробіл потрібно ввести назву замітки, теги та текст замітки")
+    #list_param = params.split(' ')
+    #if len(list_param) < 3:
+    #        raise CustomException("Після команди через пробіл потрібно ввести назву замітки, теги та текст замітки")
 
-    name = list_param[0]
-    tags = list_param[1:len(list_param)-1]
-    text_note = list_param[len(list_param)-1]
+    #name = list_param[0]
+    #tags = list_param[1:len(list_param)-1]
+    #text_note = list_param[len(list_param)-1]
+
+    name = input("Введіть назву нотатки: ")
+    tags_text = input("Введіть теги через пробіл: ")
+    tags = tags_text.split(' ')
+    text_note = input("Введіть текст нотатки: ")
     
     record = note_book.search_record(name)
     for tag in tags:
         record.add_tag(tag)
     if text_note:
         record.add_note(text_note)
-    return f"Note {name} added"
+    return f"Нотатка '{name}' успішно додана!"
 
 def note_show_all(params):
     return note_book.show_all_records()
@@ -123,9 +138,9 @@ class NoteBook(UserDict):
         for record in self.data.values():
             results += "\n"+f"{record.name.value}:"+"".join(f" {tag.value}" for tag in record.tags)
             if record.text_note:
-                results += ' Text note: '+ str(record.text_note.value)
+                results += ' Текст нотатки: '+ str(record.text_note.value)
         if not results:
-            results = "Note list is empty"
+            results = "Список нотаток пустий"
         return results
 
     def __iter__(self):
@@ -170,6 +185,16 @@ class NoteBook(UserDict):
                         break
         return results
 
+    def search_by_tag(self, search_string):
+        results = []
+        for record in self.data.values():
+            for tag in record.tags:
+                if search_string.lower() in tag.value.lower():
+                    results.append(str(record))
+                    break
+        return results
+
+
 class RecordNote:
     def __init__(self, name, text_note=None):
         self.name = Name(name)
@@ -193,7 +218,7 @@ class RecordNote:
     def __str__(self):
         results = f"{self.name.value}: {' '.join(tag.value for tag in self.tags)}"
         if self.text_note:
-                results += ' Text note: '+ str(self.text_note.value)
+                results += ' Текст нотатки: '+ str(self.text_note.value)
         return results
     
     def to_dict(self):
